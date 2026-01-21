@@ -11,7 +11,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/cattle")
-@CrossOrigin(origins = "*") // ✅ Allow mobile app access (React Native)
+@CrossOrigin(origins = "*")
 public class CattleEntryController {
 
     private final CattleEntryService cattleEntryService;
@@ -20,33 +20,35 @@ public class CattleEntryController {
         this.cattleEntryService = cattleEntryService;
     }
 
-    // ➕ Add new cattle entry
+    // Add new cattle entry
     @PostMapping("/add")
     public ResponseEntity<?> addCattleEntry(@RequestBody CattleEntryRequest request) {
         try {
             if (request.getStatus() == null) request.setStatus(CattleStatus.ACTIVE);
             CattleEntry savedEntry = cattleEntryService.addCattleEntry(request);
             return ResponseEntity.ok(savedEntry);
-        } catch (RuntimeException e) {
+        } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(500).body(e.getMessage());
         }
     }
 
-    // 🔍 Get all cattle by user
+    // Get all cattle by user (newest first)
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<CattleEntry>> getCattleEntriesByUser(@PathVariable Long userId) {
         List<CattleEntry> entries = cattleEntryService.getEntriesByUser(userId);
         return ResponseEntity.ok(entries);
     }
 
-    // 🔍 Get all sold cattle by user
+    // Get sold cattle by user
     @GetMapping("/user/{userId}/sold")
     public ResponseEntity<List<CattleEntry>> getSoldCattleEntriesByUser(@PathVariable Long userId) {
         List<CattleEntry> entries = cattleEntryService.getSoldCattleByUser(userId);
         return ResponseEntity.ok(entries);
     }
 
-    // 🔍 Get cattle filtered by category
+    // Get cattle filtered by category (keeps existing behavior)
     @GetMapping("/user/{userId}/category/{category}")
     public ResponseEntity<List<CattleEntry>> getCattleEntriesByCategory(
             @PathVariable Long userId,
@@ -60,10 +62,11 @@ public class CattleEntryController {
         return ResponseEntity.ok(filtered);
     }
 
-    // ✏️ Update cattle
+    // Update cattle
     @PutMapping("/{id}")
     public ResponseEntity<?> updateCattle(@PathVariable Long id, @RequestBody CattleEntryRequest request) {
         try {
+            // If sold date present, mark sold
             if (request.getCattleSoldDate() != null) {
                 request.setStatus(CattleStatus.SOLD);
             } else if (request.getStatus() == null) {
@@ -76,14 +79,14 @@ public class CattleEntryController {
         }
     }
 
-    // ❌ Delete cattle
+    // Delete cattle
     @DeleteMapping("/{id}")
     public ResponseEntity<String> deleteCattle(@PathVariable Long id) {
         cattleEntryService.deleteCattleEntry(id);
         return ResponseEntity.ok("Cattle entry deleted successfully");
     }
 
-    // 🔍 Get cattle by cattleCode for a specific user
+    // Get cattle by code for a specific user
     @GetMapping("/user/{userId}/code/{cattleCode}")
     public ResponseEntity<?> getCattleByCode(@PathVariable Long userId, @PathVariable String cattleCode) {
         try {

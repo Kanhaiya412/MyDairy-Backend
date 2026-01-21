@@ -12,7 +12,7 @@ import java.time.YearMonth;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/milk")   // ✅ FIXED: Added /api prefix
+@RequestMapping("/api/milk")
 public class MilkEntryController {
 
     private final MilkEntryService milkEntryService;
@@ -27,26 +27,41 @@ public class MilkEntryController {
         return ResponseEntity.ok(saved);
     }
 
-    /**
-     * GET /api/milk/user/{userId}?month=11&year=2025
-     */
+    // ========= NEW CATTLE WISE ENDPOINTS ===========
+
+    @GetMapping("/cattle/{cattleId}")
+    public ResponseEntity<?> getMilkByCattle(@PathVariable Long cattleId) {
+        return ResponseEntity.ok(milkEntryService.getMilkByCattle(cattleId));
+    }
+
+    @GetMapping("/cattle/{cattleId}/last/{days}")
+    public ResponseEntity<?> getLastNDays(@PathVariable Long cattleId, @PathVariable int days) {
+        return ResponseEntity.ok(milkEntryService.getLastNDays(cattleId, days));
+    }
+
+    @GetMapping("/cattle/{cattleId}/range")
+    public ResponseEntity<?> getCattleRange(
+            @PathVariable Long cattleId,
+            @RequestParam LocalDate start,
+            @RequestParam LocalDate end
+    ) {
+        return ResponseEntity.ok(milkEntryService.getMilkByCattleRange(cattleId, start, end));
+    }
+
+    // ========= EXISTING USER ENDPOINTS ==========
+
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getEntriesForUser(
             @PathVariable Long userId,
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year
     ) {
-        List<MilkEntry> result;
-
         if (month != null && year != null) {
             YearMonth ym = YearMonth.of(year, month);
-            LocalDate start = ym.atDay(1);
-            LocalDate end = ym.atEndOfMonth();
-            result = milkEntryService.getEntriesByUserBetween(userId, start, end);
-        } else {
-            result = milkEntryService.getEntriesByUser(userId);
+            return ResponseEntity.ok(milkEntryService.getEntriesByUserBetween(
+                    userId, ym.atDay(1), ym.atEndOfMonth()
+            ));
         }
-
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(milkEntryService.getEntriesByUser(userId));
     }
 }

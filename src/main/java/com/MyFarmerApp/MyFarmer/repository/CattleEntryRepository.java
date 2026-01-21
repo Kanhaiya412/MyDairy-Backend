@@ -16,8 +16,11 @@ public interface CattleEntryRepository extends JpaRepository<CattleEntry, Long> 
 
     List<CattleEntry> findByUserAndStatus(User user, CattleStatus status);
 
-    // ✅ Scoped lookups — unique cattle per user
+    // Scoped lookups — unique cattle per user
     Optional<CattleEntry> findByCattleIdAndUser(String cattleId, User user);
 
     boolean existsByCattleIdAndUser(String cattleId, User user);
+
+    // Helpful: return newest first
+    List<CattleEntry> findByUserOrderByCreatedAtDesc(User user);
 }

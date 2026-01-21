@@ -17,10 +17,15 @@ public class MilkEntry {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Relationship with User (Farmer)
+    // Relation to User (Farmer)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    // NEW — Optional cattle-wise milk logging
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cattle_id")
+    private CattleEntry cattleEntry;  // NULL = full farm milk entry
 
     @Column(name = "U_DAY", nullable = false)
     private String day;
@@ -30,17 +35,17 @@ public class MilkEntry {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "U_SHIFT", nullable = false)
-    private Shift shift; // MORNING or EVENING
+    private Shift shift;
 
     @Column(name = "U_MILKQUANTITY", nullable = false)
-    private Double milkQuantity; // in liters
+    private Double milkQuantity;
 
-    @Column(name = "U_FAT", nullable = false)
+    @Column(name = "U_FAT")
     private Double fat;
 
-    @Column(name = "U_FAT_PRICE", nullable = false)
-    private Double fatPrice; // per liter rate
+    @Column(name = "U_FAT_PRICE")
+    private Double fatPrice;
 
-    @Column(name = "U_TOTALPAYMENT", nullable = false)
-    private Double totalPayment; // Calculated value
+    @Column(name = "U_TOTALPAYMENT")
+    private Double totalPayment;
 }

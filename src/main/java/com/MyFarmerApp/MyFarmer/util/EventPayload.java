@@ -96,6 +96,105 @@ public class EventPayload {
                 expenseId, itemCategory, itemName, totalCost, itemBuyer, purchaseDay);
     }
 
+    public static String animalJson(String event,
+                                    String username,
+                                    String role,
+                                    boolean status,
+                                    String message,
+                                    String cattleId,
+                                    String cattleName,
+                                    String healthStatus,
+                                    String lastCheckupDate,
+                                    String nextCheckupDate,
+                                    String lastHeatDate,
+                                    String lastAIDate) {
+
+        return String.format("""
+        {
+          "event": "%s",
+          "username": "%s",
+          "role": "%s",
+          "status": %b,
+          "message": "%s",
+          "data": {
+            "cattleId": "%s",
+            "cattleName": "%s",
+            "healthStatus": "%s",
+            "lastCheckupDate": "%s",
+            "nextCheckupDate": "%s",
+            "lastHeatDate": "%s",
+            "lastAIDate": "%s"
+          }
+        }
+        """,
+                escape(event),
+                escape(username),
+                escape(role),
+                status,
+                escape(message),
+                escape(cattleId),
+                escape(cattleName),
+                escape(healthStatus),
+                escape(lastCheckupDate),
+                escape(nextCheckupDate),
+                escape(lastHeatDate),
+                escape(lastAIDate)
+        );
+    }
+    public static String labourJson(String event,
+                                    String username,
+                                    String role,
+                                    boolean status,
+                                    String message,
+                                    Long labourId,
+                                    String labourName,
+                                    Double dailyWage,
+                                    String mobile,
+                                    String joiningDate,
+                                    Integer presentDays,
+                                    Integer manualDays,
+                                    Double totalSalary,
+                                    Integer month,
+                                    Integer year) {
+
+        return String.format("""
+        {
+          "event": "%s",
+          "username": "%s",
+          "role": "%s",
+          "status": %b,
+          "message": "%s",
+          "data": {
+            "labourId": %d,
+            "labourName": "%s",
+            "dailyWage": %.2f,
+            "mobile": "%s",
+            "joiningDate": "%s",
+            "presentDays": %d,
+            "manualDays": %d,
+            "totalSalary": %.2f,
+            "month": %d,
+            "year": %d
+          }
+        }
+        """,
+                escape(event),
+                escape(username),
+                escape(role),
+                status,
+                escape(message),
+                labourId,
+                escape(labourName),
+                dailyWage,
+                escape(mobile),
+                escape(joiningDate),
+                presentDays == null ? 0 : presentDays,
+                manualDays == null ? 0 : manualDays,
+                totalSalary == null ? 0 : totalSalary,
+                month == null ? 0 : month,
+                year == null ? 0 : year
+        );
+    }
     // ==============================================
     // 🔐 COMMON HELPER
     // ==============================================

@@ -10,7 +10,9 @@ import com.MyFarmerApp.MyFarmer.util.EventPayload;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class CattleEntryService {
@@ -30,13 +32,22 @@ public class CattleEntryService {
     }
 
     // ============================================================
-    // ➕ ADD NEW CATTLE ENTRY
+    // Add new cattle entry
     // ============================================================
     public CattleEntry addCattleEntry(CattleEntryRequest request) {
+        // Basic validation
+        if (request.getUserId() == null) throw new IllegalArgumentException("userId is required");
+        if (request.getCattleId() == null || request.getCattleId().isBlank())
+            throw new IllegalArgumentException("cattleId is required");
+        if (request.getCattleCategory() == null) throw new IllegalArgumentException("cattleCategory is required");
+        if (request.getCattleBreed() == null) throw new IllegalArgumentException("cattleBreed is required");
+        if (request.getCattlePurchaseDate() == null) throw new IllegalArgumentException("purchaseDate is required");
+        if (request.getTotalCattle() == null) request.setTotalCattle(1);
+
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
-        // ✅ Ensure cattleId is unique per user
+        // Ensure unique per user
         if (cattleEntryRepository.existsByCattleIdAndUser(request.getCattleId(), user)) {
             throw new RuntimeException("Cattle ID already exists for this user");
         }
@@ -46,16 +57,20 @@ public class CattleEntryService {
                 .cattleId(request.getCattleId())
                 .cattleCategory(request.getCattleCategory())
                 .cattleBreed(request.getCattleBreed())
+                .gender(request.getGender()) // may be null
                 .cattlePurchaseDate(request.getCattlePurchaseDate())
                 .cattleDay(request.getCattleDay())
                 .cattlePurchaseFrom(request.getCattlePurchaseFrom())
-                .cattlename(request.getCattleName())
+                .cattleName(request.getCattleName())
                 .cattlePurchasePrice(request.getCattlePurchasePrice())
                 .cattleSoldDate(request.getCattleSoldDate())
                 .cattleSoldTo(request.getCattleSoldTo())
                 .cattleSoldPrice(request.getCattleSoldPrice())
                 .totalCattle(request.getTotalCattle())
+                .imageUrl(request.getImageUrl())
                 .status(request.getStatus() != null ? request.getStatus() : CattleStatus.ACTIVE)
+                .createdAt(LocalDate.now())
+                .updatedAt(LocalDate.now())
                 .build();
 
         CattleEntry saved = cattleEntryRepository.save(entry);
@@ -65,42 +80,36 @@ public class CattleEntryService {
     }
 
     // ============================================================
-    // ✏️ UPDATE EXISTING CATTLE ENTRY (NULL-SAFE)
+    // Update existing cattle entry (partial updates allowed)
     // ============================================================
     @Transactional
-    public CattleEntry updateCattleEntry(Long cattleId, CattleEntryRequest request) {
-        CattleEntry existing = cattleEntryRepository.findById(cattleId)
+    public CattleEntry updateCattleEntry(Long id, CattleEntryRequest request) {
+        CattleEntry existing = cattleEntryRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Cattle entry not found"));
 
-        if (request.getCattleCategory() != null)
-            existing.setCattleCategory(request.getCattleCategory());
-        if (request.getCattleBreed() != null)
-            existing.setCattleBreed(request.getCattleBreed());
-        if (request.getCattlePurchaseDate() != null)
-            existing.setCattlePurchaseDate(request.getCattlePurchaseDate());
-        if (request.getCattlePurchaseFrom() != null)
-            existing.setCattlePurchaseFrom(request.getCattlePurchaseFrom());
-        if (request.getCattleDay() != null)
-            existing.setCattleDay(request.getCattleDay());
-        if (request.getCattleName() != null)
-            existing.setCattlename(request.getCattleName());
-        if (request.getCattlePurchasePrice() != null)
-            existing.setCattlePurchasePrice(request.getCattlePurchasePrice());
-        if (request.getCattleSoldDate() != null)
-            existing.setCattleSoldDate(request.getCattleSoldDate());
-        if (request.getCattleSoldTo() != null)
-            existing.setCattleSoldTo(request.getCattleSoldTo());
-        if (request.getCattleSoldPrice() != null)
-            existing.setCattleSoldPrice(request.getCattleSoldPrice());
-        if (request.getTotalCattle() != null)
-            existing.setTotalCattle(request.getTotalCattle());
+        // Only update fields that are provided (null-safe)
+        if (request.getCattleCategory() != null) existing.setCattleCategory(request.getCattleCategory());
+        if (request.getCattleBreed() != null) existing.setCattleBreed(request.getCattleBreed());
+        if (request.getGender() != null) existing.setGender(request.getGender());
+        if (request.getCattlePurchaseDate() != null) existing.setCattlePurchaseDate(request.getCattlePurchaseDate());
+        if (request.getCattlePurchaseFrom() != null) existing.setCattlePurchaseFrom(request.getCattlePurchaseFrom());
+        if (request.getCattleDay() != null) existing.setCattleDay(request.getCattleDay());
+        if (request.getCattleName() != null) existing.setCattleName(request.getCattleName());
+        if (request.getCattlePurchasePrice() != null) existing.setCattlePurchasePrice(request.getCattlePurchasePrice());
+        if (request.getCattleSoldDate() != null) existing.setCattleSoldDate(request.getCattleSoldDate());
+        if (request.getCattleSoldTo() != null) existing.setCattleSoldTo(request.getCattleSoldTo());
+        if (request.getCattleSoldPrice() != null) existing.setCattleSoldPrice(request.getCattleSoldPrice());
+        if (request.getTotalCattle() != null) existing.setTotalCattle(request.getTotalCattle());
+        if (request.getImageUrl() != null) existing.setImageUrl(request.getImageUrl());
 
-        // ✅ Status handling
+        // Status handling: sold date implies SOLD
         if (request.getCattleSoldDate() != null) {
             existing.setStatus(CattleStatus.SOLD);
         } else if (request.getStatus() != null) {
             existing.setStatus(request.getStatus());
         }
+
+        existing.setUpdatedAt(LocalDate.now());
 
         CattleEntry updated = cattleEntryRepository.save(existing);
         sendKafkaEvent("CATTLE_ENTRY_UPDATED", updated, "Cattle entry updated successfully");
@@ -108,27 +117,26 @@ public class CattleEntryService {
     }
 
     // ============================================================
-    // ❌ DELETE CATTLE ENTRY
+    // Delete cattle entry
     // ============================================================
-    public void deleteCattleEntry(Long cattleId) {
-        CattleEntry existing = cattleEntryRepository.findById(cattleId)
+    public void deleteCattleEntry(Long id) {
+        CattleEntry existing = cattleEntryRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Cattle entry not found"));
-
         cattleEntryRepository.delete(existing);
         sendKafkaEvent("CATTLE_ENTRY_DELETED", existing, "Cattle entry deleted successfully");
     }
 
     // ============================================================
-    // 🔍 GET ALL CATTLE BY USER
+    // Get all cattle by user (newest first)
     // ============================================================
     public List<CattleEntry> getEntriesByUser(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        return cattleEntryRepository.findByUser(user);
+        return cattleEntryRepository.findByUserOrderByCreatedAtDesc(user);
     }
 
     // ============================================================
-    // 🔍 GET ALL SOLD CATTLE BY USER
+    // Get sold cattle by user
     // ============================================================
     public List<CattleEntry> getSoldCattleByUser(Long userId) {
         User user = userRepository.findById(userId)
@@ -137,7 +145,7 @@ public class CattleEntryService {
     }
 
     // ============================================================
-    // 🔍 GET CATTLE BY CODE — SCOPED TO USER
+    // Get cattle by cattle code scoped to user
     // ============================================================
     public CattleEntry getCattleByCattleCode(String cattleCode, Long userId) {
         User user = userRepository.findById(userId)
@@ -148,7 +156,7 @@ public class CattleEntryService {
     }
 
     // ============================================================
-    // 📨 SEND KAFKA EVENT
+    // Kafka event helper
     // ============================================================
     private void sendKafkaEvent(String eventType, CattleEntry entry, String message) {
         try {
@@ -162,11 +170,12 @@ public class CattleEntryService {
                     entry.getCattleCategory().name(),
                     entry.getCattleBreed().name(),
                     entry.getCattlePurchasePrice(),
-                    entry.getCattlename(),
+                    entry.getCattleName(),
                     entry.getTotalCattle()
             );
             kafkaProducerService.sendToTopic(CATTLE_TOPIC, payload);
         } catch (Exception e) {
+            // keep non-blocking - log the error
             System.err.println("⚠️ Failed to send Kafka event: " + e.getMessage());
         }
     }

@@ -10,6 +10,9 @@ public class KafkaProducerService {
 
 
     public static final String MILK_TOPIC = "milk-events";
+    public static final String LABOUR_TOPIC = "labour-events";
+    public static final String ATTENDANCE_TOPIC = "attendance-events";
+    public static final String SALARY_TOPIC = "salary-events";
 
     private final KafkaTemplate<String, String> kafkaTemplate;
 
@@ -23,6 +26,7 @@ public class KafkaProducerService {
         kafkaTemplate.send(TOPIC, eventJson);
         System.out.println("📤 Sent Kafka event: " + eventJson);
     }
+
 
     public void sendToTopic(String topic, String eventJson) {
         kafkaTemplate.send(topic, eventJson);

@@ -11,6 +11,8 @@ public class MilkEntryRequest {
     @NotNull
     private Long userId;
 
+    private Long cattleId;
+
     // remove sending 'day' from client; it will be computed on server
     private String day;
 
@@ -28,6 +30,7 @@ public class MilkEntryRequest {
     @DecimalMin(value = "0.1", message = "Fat must be >= 0.1")
     @DecimalMax(value = "20.0", message = "Fat unrealistic")
     private Double fat;
+
 
     @NotNull
     @DecimalMin(value = "0.01", message = "Fat price must be > 0")

@@ -1,8 +1,9 @@
 package com.MyFarmerApp.MyFarmer.dto;
 
-import com.MyFarmerApp.MyFarmer.enums.CattleCategory;
 import com.MyFarmerApp.MyFarmer.enums.CattleBreed;
+import com.MyFarmerApp.MyFarmer.enums.CattleCategory;
 import com.MyFarmerApp.MyFarmer.enums.CattleStatus;
+import com.MyFarmerApp.MyFarmer.enums.CattleGender;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -11,8 +12,7 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 
 /**
- * ✅ DTO for transferring cattle entry data between frontend and backend.
- * Used for both Add & Update operations.
+ * DTO for creating/updating cattle. Server handles timestamps.
  */
 @Data
 @NoArgsConstructor
@@ -20,27 +20,32 @@ import java.time.LocalDate;
 @Builder
 public class CattleEntryRequest {
 
-    // 🧑‍🌾 Associated user (farmer) ID
     private Long userId;
 
-    // 🐮 Basic cattle details
-    private String cattleId;                         // Unique Cattle Code (e.g., CAT-001)
-    private String cattleName;                       // Display name (e.g., "Laxmi")
-    private CattleCategory cattleCategory;            // COW / BUFFALO
-    private CattleBreed cattleBreed;                  // GIR / JAFRAWADI / etc.
-    private Integer totalCattle;                      // Total number of cattle (optional)
+    // Identification
+    private String cattleId;          // Unique code (required on create)
+    private String cattleName;
+    private CattleCategory cattleCategory;
+    private CattleBreed cattleBreed;
+    private CattleGender gender;      // NEW
 
-    // 📅 Purchase details
-    private LocalDate cattlePurchaseDate;             // Purchase date
-    private String cattleDay;                         // Auto-filled day (Monday, etc.)
-    private String cattlePurchaseFrom;                // Seller/source
-    private Double cattlePurchasePrice;               // Purchase price in ₹
+    // Purchase details
+    private LocalDate cattlePurchaseDate;
+    private String cattleDay;
+    private String cattlePurchaseFrom;
+    private Double cattlePurchasePrice;
 
-    // 💰 Sale details (optional)
-    private LocalDate cattleSoldDate;                 // Sale date
-    private String cattleSoldTo;                      // Buyer name
-    private Double cattleSoldPrice;                   // Sale price
+    // Sale details (optional)
+    private LocalDate cattleSoldDate;
+    private String cattleSoldTo;
+    private Double cattleSoldPrice;
 
-    // ⚙️ Status of the cattle (ACTIVE / SOLD / DEAD / etc.)
+    // Count / metadata
+    private Integer totalCattle;
+
+    // NEW: image link (optional)
+    private String imageUrl;
+
+    // Optional status override
     private CattleStatus status;
 }

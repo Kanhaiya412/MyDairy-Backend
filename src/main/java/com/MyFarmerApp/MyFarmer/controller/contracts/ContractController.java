@@ -1,4 +1,4 @@
-// src/main/java/com/MyFarmerApp/MyFarmer/controller/contracts/ContractController.java
+
 package com.MyFarmerApp.MyFarmer.controller.contracts;
 
 import com.MyFarmerApp.MyFarmer.dto.LoanSummaryResponse;

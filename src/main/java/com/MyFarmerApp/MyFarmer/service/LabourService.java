@@ -33,11 +33,13 @@ public class LabourService {
     private final UserRepository userRepository;
     private final KafkaProducerService kafkaProducerService;
 
-    public LabourService(LabourRepository labourRepository,
-                         LabourAttendanceRepository attendanceRepository,
-                         LabourSalaryRepository salaryRepository,
-                         UserRepository userRepository,
-                         KafkaProducerService kafkaProducerService) {
+    public LabourService(
+            LabourRepository labourRepository,
+            LabourAttendanceRepository attendanceRepository,
+            LabourSalaryRepository salaryRepository,
+            UserRepository userRepository,
+            KafkaProducerService kafkaProducerService
+    ) {
         this.labourRepository = labourRepository;
         this.attendanceRepository = attendanceRepository;
         this.salaryRepository = salaryRepository;
@@ -51,19 +53,21 @@ public class LabourService {
 
     public Labour addLabour(User user, LabourRequest req) {
 
+        if (user == null) throw new RuntimeException("User not found");
         if (req.getLabourName() == null || req.getLabourName().isBlank()) {
             throw new IllegalArgumentException("labourName is required");
         }
 
         // WageType
         WageType wageType = WageType.DAILY;
-        if (req.getWageType() != null) {
+        if (req.getWageType() != null && !req.getWageType().isBlank()) {
             wageType = WageType.valueOf(req.getWageType().toUpperCase());
         }
 
         Double dailyWage = req.getDailyWage();
         Double monthlySalary = req.getMonthlySalary();
 
+        // ✅ validate wage
         if (wageType == WageType.DAILY) {
             if (dailyWage == null || dailyWage <= 0) {
                 throw new IllegalArgumentException("dailyWage must be positive for DAILY wageType");
@@ -72,21 +76,22 @@ public class LabourService {
             if (monthlySalary == null || monthlySalary <= 0) {
                 throw new IllegalArgumentException("monthlySalary must be positive for MONTHLY wageType");
             }
-            // derive effective daily wage if not set
+            // optional derive daily wage
             if (dailyWage == null || dailyWage <= 0) {
-                dailyWage = monthlySalary / 30.0;  // simple approximation
+                dailyWage = monthlySalary / 30.0;
             }
         }
 
         LocalDate joiningDate = null;
         if (req.getJoiningDate() != null && !req.getJoiningDate().isBlank()) {
-            joiningDate = LocalDate.parse(req.getJoiningDate()); // expects yyyy-MM-dd
+            joiningDate = LocalDate.parse(req.getJoiningDate()); // yyyy-MM-dd
         }
 
         Labour labour = Labour.builder()
                 .user(user)
                 .labourName(req.getLabourName().trim())
                 .mobile(req.getMobile())
+                .photoUrl(req.getPhotoUrl()) // ✅ PHOTO SUPPORT
                 .wageType(wageType)
                 .dailyWage(dailyWage)
                 .monthlySalary(monthlySalary)
@@ -117,20 +122,24 @@ public class LabourService {
 
         if (req.getLabourName() != null) existing.setLabourName(req.getLabourName());
         if (req.getMobile() != null) existing.setMobile(req.getMobile());
+        if (req.getPhotoUrl() != null) existing.setPhotoUrl(req.getPhotoUrl()); // ✅ PHOTO UPDATE
         if (req.getAddress() != null) existing.setAddress(req.getAddress());
         if (req.getNotes() != null) existing.setNotes(req.getNotes());
         if (req.getReferralBy() != null) existing.setReferralBy(req.getReferralBy());
         if (req.getUseAttendance() != null) existing.setUseAttendance(req.getUseAttendance());
 
-        if (req.getWageType() != null) {
+        if (req.getWageType() != null && !req.getWageType().isBlank()) {
             existing.setWageType(WageType.valueOf(req.getWageType().toUpperCase()));
         }
+
         if (req.getDailyWage() != null && req.getDailyWage() > 0) {
             existing.setDailyWage(req.getDailyWage());
         }
+
         if (req.getMonthlySalary() != null && req.getMonthlySalary() > 0) {
             existing.setMonthlySalary(req.getMonthlySalary());
-            // If wageType is MONTHLY and no explicit dailyWage, derive again
+
+            // If wageType is MONTHLY and dailyWage missing, derive again
             if (existing.getWageType() == WageType.MONTHLY &&
                     (existing.getDailyWage() == null || existing.getDailyWage() <= 0)) {
                 existing.setDailyWage(req.getMonthlySalary() / 30.0);
@@ -142,6 +151,7 @@ public class LabourService {
         if (req.getJoiningDate() != null && !req.getJoiningDate().isBlank()) {
             existing.setJoiningDate(LocalDate.parse(req.getJoiningDate()));
         }
+
         if (req.getStatus() != null) existing.setStatus(req.getStatus());
 
         existing.setUpdatedAt(LocalDate.now());
@@ -161,20 +171,21 @@ public class LabourService {
 
     @Transactional
     public LabourAttendance markAttendance(LabourAttendanceRequest req) {
+
         if (req.getLabourId() == null) {
             throw new IllegalArgumentException("labourId is required");
         }
         if (req.getDate() == null || req.getDate().isBlank()) {
             throw new IllegalArgumentException("date is required (yyyy-MM-dd)");
         }
-        if (req.getStatus() == null) {
+        if (req.getStatus() == null || req.getStatus().isBlank()) {
             throw new IllegalArgumentException("status is required: PRESENT / ABSENT");
         }
 
         Labour labour = labourRepository.findById(req.getLabourId())
                 .orElseThrow(() -> new RuntimeException("Labour not found"));
 
-        LocalDate date = LocalDate.parse(req.getDate()); // expects yyyy-MM-dd
+        LocalDate date = LocalDate.parse(req.getDate());
 
         LabourAttendanceStatus status =
                 LabourAttendanceStatus.valueOf(req.getStatus().toUpperCase());
@@ -189,6 +200,7 @@ public class LabourService {
         attendance.setDate(date);
         attendance.setStatus(status);
         attendance.setRemarks(req.getRemarks());
+
         if (attendance.getCreatedAt() == null) {
             attendance.setCreatedAt(LocalDate.now());
         }
@@ -196,6 +208,7 @@ public class LabourService {
 
         LabourAttendance saved = attendanceRepository.save(attendance);
 
+        // ✅ kafka event (optional)
         String payload = EventPayload.labourJson(
                 "ATTENDANCE_MARKED",
                 labour.getUser().getUsername(),
@@ -220,6 +233,7 @@ public class LabourService {
     }
 
     public List<LabourAttendance> getAttendanceForMonth(Long labourId, int month, int year) {
+
         Labour labour = labourRepository.findById(labourId)
                 .orElseThrow(() -> new RuntimeException("Labour not found"));
 
@@ -231,11 +245,12 @@ public class LabourService {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // SALARY GENERATION (using attendance + manual + full month)
+    // SALARY GENERATION
     // ─────────────────────────────────────────────────────────────
 
     @Transactional
     public LabourSalary generateSalary(LabourSalaryGenerateRequest req) {
+
         if (req.getLabourId() == null) {
             throw new IllegalArgumentException("labourId is required");
         }
@@ -260,21 +275,21 @@ public class LabourService {
         Integer manualDays = req.getManualDays();
         boolean fullMonth = Boolean.TRUE.equals(req.getFullMonth());
 
+        // ✅ attendance based days
         if (useAttendance) {
             List<LabourAttendance> attendanceList =
                     attendanceRepository.findByLabourAndDateBetween(labour, start, end);
 
-            long presentCount = attendanceList.stream()
+            presentDays = (int) attendanceList.stream()
                     .filter(a -> a.getStatus() == LabourAttendanceStatus.PRESENT)
                     .count();
-
-            presentDays = (int) presentCount;
         }
 
+        // ✅ FIXED LOGIC: useAttendance true => always use presentDays (even 0)
         int effectiveDays;
-        if (useAttendance && presentDays > 0) {
+        if (useAttendance) {
             effectiveDays = presentDays;
-            manualDays = null;
+            manualDays = null; // ignore manual if attendance is ON
         } else if (manualDays != null && manualDays > 0) {
             effectiveDays = manualDays;
         } else if (fullMonth) {
@@ -286,11 +301,11 @@ public class LabourService {
 
         double totalSalary;
 
-        // DAILY or MONTHLY -> always use dailyWage as base rate
+        // Base daily wage (MONTHLY may have derived dailyWage)
         double baseDailyWage = labour.getDailyWage() != null ? labour.getDailyWage() : 0.0;
 
+        // ✅ MONTHLY + attendance OFF => fixed salary
         if (!useAttendance && labour.getWageType() == WageType.MONTHLY && labour.getMonthlySalary() != null) {
-            // fixed monthly salary, no attendance
             totalSalary = labour.getMonthlySalary();
             presentDays = 0;
             manualDays = null;
@@ -305,10 +320,11 @@ public class LabourService {
         salary.setLabour(labour);
         salary.setMonth(month);
         salary.setYear(year);
-        salary.setPresentDays(useAttendance && presentDays > 0 ? presentDays : null);
+        salary.setPresentDays(useAttendance ? presentDays : null);
         salary.setManualDays(manualDays);
         salary.setTotalSalary(totalSalary);
         salary.setGeneratedDate(LocalDate.now());
+
         if (salary.getPaymentStatus() == null) {
             salary.setPaymentStatus(LabourPaymentStatus.UNPAID);
         }
@@ -319,6 +335,7 @@ public class LabourService {
 
         LabourSalary savedSalary = salaryRepository.save(salary);
 
+        // ✅ kafka event (optional)
         String payload = EventPayload.labourJson(
                 "SALARY_GENERATED",
                 labour.getUser().getUsername(),
@@ -343,6 +360,7 @@ public class LabourService {
     }
 
     public List<LabourSalary> getSalaryHistory(Long labourId) {
+
         Labour labour = labourRepository.findById(labourId)
                 .orElseThrow(() -> new RuntimeException("Labour not found"));
 
@@ -353,16 +371,20 @@ public class LabourService {
         return labourRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Labour not found"));
     }
-        @Transactional
+
+    @Transactional
     public LabourSalary markSalaryPaid(Long salaryId) {
+
         LabourSalary salary = salaryRepository.findById(salaryId)
                 .orElseThrow(() -> new RuntimeException("Salary record not found"));
 
         salary.setPaymentStatus(LabourPaymentStatus.PAID);
         salary.setPaidDate(LocalDate.now());
         salary.setUpdatedAt(LocalDate.now());
+
         LabourSalary updated = salaryRepository.save(salary);
 
+        // ✅ kafka event (optional)
         String payload = EventPayload.labourJson(
                 "SALARY_PAID",
                 salary.getLabour().getUser().getUsername(),

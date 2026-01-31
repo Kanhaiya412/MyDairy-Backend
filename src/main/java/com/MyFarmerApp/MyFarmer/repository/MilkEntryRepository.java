@@ -1,8 +1,8 @@
 package com.MyFarmerApp.MyFarmer.repository;
 
+import com.MyFarmerApp.MyFarmer.entity.CattleEntry;
 import com.MyFarmerApp.MyFarmer.entity.MilkEntry;
 import com.MyFarmerApp.MyFarmer.entity.User;
-import com.MyFarmerApp.MyFarmer.entity.CattleEntry;
 import com.MyFarmerApp.MyFarmer.enums.Shift;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 public interface MilkEntryRepository extends JpaRepository<MilkEntry, Long> {
 
@@ -37,19 +38,35 @@ public interface MilkEntryRepository extends JpaRepository<MilkEntry, Long> {
 
     // ======== NEW (CATTLE WISE) ========
 
-    // Get all milk entries for a cattle
     List<MilkEntry> findByCattleEntryOrderByDateAsc(CattleEntry cattleEntry);
 
-    // Last N days for cattle
     List<MilkEntry> findByCattleEntryAndDateGreaterThanEqualOrderByDateAsc(
             CattleEntry cattleEntry,
             LocalDate fromDate
     );
 
-    // Date range for cattle
     List<MilkEntry> findByCattleEntryAndDateBetweenOrderByDateAsc(
             CattleEntry cattleEntry,
             LocalDate start,
             LocalDate end
+    );
+
+    // ✅ duplicate check for cattle wise entry
+    boolean existsByUserAndCattleEntryAndDateAndShift(
+            User user,
+            CattleEntry cattleEntry,
+            LocalDate date,
+            Shift shift
+    );
+
+    // ✅ find existing entry for edit/update (general entry)
+    Optional<MilkEntry> findByUserAndDateAndShift(User user, LocalDate date, Shift shift);
+
+    // ✅ find existing entry for edit/update (cattle wise)
+    Optional<MilkEntry> findByUserAndCattleEntryAndDateAndShift(
+            User user,
+            CattleEntry cattleEntry,
+            LocalDate date,
+            Shift shift
     );
 }

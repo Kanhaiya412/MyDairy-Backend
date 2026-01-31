@@ -1,28 +1,32 @@
-// src/main/java/com/MyFarmerApp/MyFarmer/dto/LabourRequest.java
+// src/main/java/com/MyFarmerApp/MyFarmer/dto/LabourResponseDTO.java
 package com.MyFarmerApp.MyFarmer.dto;
 
 import com.MyFarmerApp.MyFarmer.enums.LabourStatus;
+import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDate;
+
 @Data
-public class LabourRequest {
+@Builder
+public class LabourResponseDTO {
+
+    private Long id;
+
+    private Long userId;
 
     private String labourName;
     private String mobile;
 
-    // ✅ NEW: Photo URL/path
     private String photoUrl;
 
-    // "DAILY" | "MONTHLY"
-    private String wageType;
-
+    private String wageType; // DAILY | MONTHLY
     private Double dailyWage;
     private Double monthlySalary;
 
-    private String role;          // optional, default "LABOUR"
+    private String role;
 
-    // yyyy-MM-dd
-    private String joiningDate;
+    private LocalDate joiningDate;
 
     private LabourStatus status;
 
@@ -30,4 +34,7 @@ public class LabourRequest {
     private String notes;
     private Boolean useAttendance;
     private String referralBy;
+
+    private LocalDate createdAt;
+    private LocalDate updatedAt;
 }

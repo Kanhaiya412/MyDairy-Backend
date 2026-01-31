@@ -1,14 +1,13 @@
+// src/main/java/com/MyFarmerApp/MyFarmer/controller/contracts/ContractController.java
 package com.MyFarmerApp.MyFarmer.controller.contracts;
 
 import com.MyFarmerApp.MyFarmer.dto.LoanSummaryResponse;
 import com.MyFarmerApp.MyFarmer.dto.contracts.*;
-import com.MyFarmerApp.MyFarmer.entity.contracts.*;
+import com.MyFarmerApp.MyFarmer.entity.contracts.LabourLoanAccount;
+import com.MyFarmerApp.MyFarmer.entity.contracts.LabourLoanSummary;
 import com.MyFarmerApp.MyFarmer.service.contracts.ContractService;
-
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/contract")
@@ -38,6 +37,7 @@ public class ContractController {
     public ResponseEntity<?> close(@PathVariable Long id) {
         return ResponseEntity.ok(contractService.closeContract(id));
     }
+
     // ---------------------------------------------------------
     // 2) PENALTY
     // ---------------------------------------------------------
@@ -94,17 +94,28 @@ public class ContractController {
         return ResponseEntity.ok(contractService.getLoanTransactions(accountId));
     }
 
+    // ✅ FIXED: summary NULL safe
     @GetMapping("/{contractId}/loan/summary")
     public ResponseEntity<?> loanSummary(@PathVariable Long contractId) {
 
         LabourLoanAccount account = contractService.getLoanAccount(contractId);
         if (account == null) {
-            return ResponseEntity.ok(null); // no account
+            return ResponseEntity.ok(null);
         }
 
         LabourLoanSummary summary = contractService.getLoanSummary(account.getId());
+        if (summary == null) {
+            // ✅ return zero summary instead of crash
+            LoanSummaryResponse resp = LoanSummaryResponse.builder()
+                    .accountId(account.getId())
+                    .totalDisbursed(0.0)
+                    .totalRepaid(0.0)
+                    .totalInterest(0.0)
+                    .outstandingAmount(account.getOutstanding() != null ? account.getOutstanding() : 0.0)
+                    .build();
+            return ResponseEntity.ok(resp);
+        }
 
-        // build response DTO
         LoanSummaryResponse resp = LoanSummaryResponse.builder()
                 .accountId(account.getId())
                 .totalDisbursed(summary.getTotalDisbursed())
@@ -115,5 +126,4 @@ public class ContractController {
 
         return ResponseEntity.ok(resp);
     }
-
 }

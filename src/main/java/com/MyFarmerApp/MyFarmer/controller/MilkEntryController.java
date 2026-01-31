@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/milk")
@@ -21,10 +20,25 @@ public class MilkEntryController {
         this.milkEntryService = milkEntryService;
     }
 
+    // ✅ ADD
     @PostMapping("/add")
     public ResponseEntity<?> addEntry(@Valid @RequestBody MilkEntryRequest request) {
         MilkEntry saved = milkEntryService.addMilkEntry(request);
         return ResponseEntity.ok(saved);
+    }
+
+    // ✅ UPDATE (EDIT)
+    @PutMapping("/update")
+    public ResponseEntity<?> updateEntry(@Valid @RequestBody MilkEntryRequest request) {
+        MilkEntry updated = milkEntryService.updateMilkEntry(request);
+        return ResponseEntity.ok(updated);
+    }
+
+    // ✅ DELETE
+    @DeleteMapping("/delete/{entryId}")
+    public ResponseEntity<?> deleteEntry(@PathVariable Long entryId) {
+        milkEntryService.deleteMilkEntry(entryId);
+        return ResponseEntity.ok("Milk entry deleted successfully ✅");
     }
 
     // ========= NEW CATTLE WISE ENDPOINTS ===========
@@ -48,7 +62,7 @@ public class MilkEntryController {
         return ResponseEntity.ok(milkEntryService.getMilkByCattleRange(cattleId, start, end));
     }
 
-    // ========= EXISTING USER ENDPOINTS ==========
+    // ========= USER ENDPOINTS ==========
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<?> getEntriesForUser(

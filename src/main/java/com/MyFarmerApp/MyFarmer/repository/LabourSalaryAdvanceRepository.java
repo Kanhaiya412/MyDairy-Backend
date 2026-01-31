@@ -1,3 +1,4 @@
+// src/main/java/com/MyFarmerApp/MyFarmer/repository/LabourSalaryAdvanceRepository.java
 package com.MyFarmerApp.MyFarmer.repository;
 
 import com.MyFarmerApp.MyFarmer.entity.LabourSalaryAdvance;
@@ -10,7 +11,15 @@ public interface LabourSalaryAdvanceRepository extends JpaRepository<LabourSalar
 
     List<LabourSalaryAdvance> findByLabourIdOrderByDateDesc(Long labourId);
 
-    List<LabourSalaryAdvance> findByLabourIdAndDateBetweenAndStatus(
+    // ✅ FIX: month/year filter me status filter remove
+    List<LabourSalaryAdvance> findByLabourIdAndDateBetweenOrderByDateDesc(
+            Long labourId,
+            LocalDate start,
+            LocalDate end
+    );
+
+    // ✅ Optional: only pending (for salary/loan deduction screen if needed)
+    List<LabourSalaryAdvance> findByLabourIdAndDateBetweenAndStatusOrderByDateDesc(
             Long labourId,
             LocalDate start,
             LocalDate end,

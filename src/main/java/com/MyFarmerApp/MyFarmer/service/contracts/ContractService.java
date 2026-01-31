@@ -1,3 +1,4 @@
+// src/main/java/com/MyFarmerApp/MyFarmer/service/contracts/ContractService.java
 package com.MyFarmerApp.MyFarmer.service.contracts;
 
 import com.MyFarmerApp.MyFarmer.dto.contracts.*;
@@ -44,50 +45,57 @@ public class ContractService {
     @Transactional
     public LabourContract createContract(CreateContractRequest req) {
 
+        if (req.getLabourId() == null) throw new RuntimeException("labourId is required");
+        if (req.getContractType() == null || req.getContractType().isBlank())
+            throw new RuntimeException("contractType is required");
+        if (req.getContractAmount() == null || req.getContractAmount() <= 0)
+            throw new RuntimeException("contractAmount must be positive");
+        if (req.getStartDate() == null || req.getStartDate().isBlank())
+            throw new RuntimeException("startDate is required");
+        if (req.getEndDate() == null || req.getEndDate().isBlank())
+            throw new RuntimeException("endDate is required");
+
         Labour labour = labourRepository.findById(req.getLabourId())
                 .orElseThrow(() -> new RuntimeException("Labour not found"));
 
-        Integer allowedLeaves = (req.getAllowedLeaves() != null)
-                ? req.getAllowedLeaves()
-                : 21;
-
-        Double monthlyInterestRate = (req.getMonthlyInterestRate() != null)
-                ? req.getMonthlyInterestRate()
-                : 0.02;
+        Integer allowedLeaves = (req.getAllowedLeaves() != null) ? req.getAllowedLeaves() : 21;
+        Double monthlyInterestRate = (req.getMonthlyInterestRate() != null) ? req.getMonthlyInterestRate() : 0.02;
 
         LabourContract contract = LabourContract.builder()
                 .labour(labour)
-                .contractType(req.getContractType())
+                .contractType(req.getContractType().toUpperCase())
                 .contractAmount(req.getContractAmount())
                 .startDate(LocalDate.parse(req.getStartDate()))
                 .endDate(LocalDate.parse(req.getEndDate()))
                 .allowedLeaves(allowedLeaves)
                 .monthlyInterestRate(monthlyInterestRate)
-                // advancePaid, active, createdAt get defaults from @Builder.Default
                 .build();
 
         LabourContract savedContract = contractRepo.save(contract);
 
-        // Create Loan Account
-        LabourLoanAccount account = LabourLoanAccount.builder()
-                .contract(savedContract)
-                .monthlyInterestRate(savedContract.getMonthlyInterestRate())
-                .outstanding(0.0)
-                .status("ACTIVE")
-                .build();
+        // ✅ Create Loan Account only if not exists
+        LabourLoanAccount existing = loanAccountRepo.findByContractId(savedContract.getId());
+        if (existing == null) {
+            LabourLoanAccount account = LabourLoanAccount.builder()
+                    .contract(savedContract)
+                    .monthlyInterestRate(savedContract.getMonthlyInterestRate())
+                    .outstanding(0.0)
+                    .status("ACTIVE")
+                    .build();
 
-        loanAccountRepo.save(account);
+            LabourLoanAccount savedAccount = loanAccountRepo.save(account);
 
-        // Create Loan Summary
-        LabourLoanSummary summary = LabourLoanSummary.builder()
-                .loanAccount(account)
-                .totalDisbursed(0.0)
-                .totalRepaid(0.0)
-                .totalInterest(0.0)
-                .outstandingAmount(0.0)
-                .build();
+            // ✅ Create Loan Summary
+            LabourLoanSummary summary = LabourLoanSummary.builder()
+                    .loanAccount(savedAccount)
+                    .totalDisbursed(0.0)
+                    .totalRepaid(0.0)
+                    .totalInterest(0.0)
+                    .outstandingAmount(0.0)
+                    .build();
 
-        summaryRepo.save(summary);
+            summaryRepo.save(summary);
+        }
 
         return savedContract;
     }
@@ -97,6 +105,13 @@ public class ContractService {
     // ------------------------------------------------------------------
 
     public LabourLeavePenalty createPenalty(CreatePenaltyRequest req) {
+
+        if (req.getLabourId() == null) throw new RuntimeException("labourId is required");
+        if (req.getDate() == null || req.getDate().isBlank()) throw new RuntimeException("date is required");
+        if (req.getExtraLeaves() == null || req.getExtraLeaves() <= 0)
+            throw new RuntimeException("extraLeaves must be positive");
+        if (req.getPenaltyAmount() == null || req.getPenaltyAmount() <= 0)
+            throw new RuntimeException("penaltyAmount must be positive");
 
         Labour labour = labourRepository.findById(req.getLabourId())
                 .orElseThrow(() -> new RuntimeException("Labour not found"));
@@ -163,6 +178,11 @@ public class ContractService {
     @Transactional
     public LabourLoanTransaction recordLoanDisbursement(Long contractId, LoanDisbursementRequest req) {
 
+        if (req.getAmount() == null || req.getAmount() <= 0)
+            throw new RuntimeException("amount must be positive");
+        if (req.getDate() == null || req.getDate().isBlank())
+            throw new RuntimeException("date is required (yyyy-MM-dd)");
+
         LabourLoanAccount account = loanAccountRepo.findByContractId(contractId);
         if (account == null) {
             throw new RuntimeException("Loan account not found for contract");
@@ -170,11 +190,11 @@ public class ContractService {
 
         double amount = req.getAmount();
 
-        // 1) Update outstanding
+        // ✅ Update outstanding
         account.setOutstanding(account.getOutstanding() + amount);
         loanAccountRepo.save(account);
 
-        // 2) Fix NULL summary
+        // ✅ Summary safe
         LabourLoanSummary summary = summaryRepo.findByLoanAccountId(account.getId());
         if (summary == null) {
             summary = LabourLoanSummary.builder()
@@ -190,7 +210,7 @@ public class ContractService {
         summary.setOutstandingAmount(account.getOutstanding());
         summaryRepo.save(summary);
 
-        // 3) Create transaction entry
+        // ✅ Txn entry
         LabourLoanTransaction txn = LabourLoanTransaction.builder()
                 .loanAccount(account)
                 .txnDate(LocalDate.parse(req.getDate()))
@@ -204,23 +224,46 @@ public class ContractService {
     }
 
     // ------------------------------------------------------------------
-    // 4) LOAN REPAYMENT
+    // 4) LOAN REPAYMENT (✅ FIXED)
     // ------------------------------------------------------------------
 
     @Transactional
     public LabourLoanTransaction recordLoanRepayment(Long contractId, LoanRepaymentRequest req) {
 
+        if (req.getAmount() == null || req.getAmount() <= 0)
+            throw new RuntimeException("amount must be positive");
+        if (req.getDate() == null || req.getDate().isBlank())
+            throw new RuntimeException("date is required (yyyy-MM-dd)");
+
         LabourLoanAccount account = loanAccountRepo.findByContractId(contractId);
+        if (account == null) {
+            throw new RuntimeException("Loan account not found for contract");
+        }
 
         double amount = req.getAmount();
 
-        account.setOutstanding(account.getOutstanding() - amount);
-        if (account.getOutstanding() <= 0) {
+        // ✅ outstanding never negative
+        double newOutstanding = account.getOutstanding() - amount;
+        account.setOutstanding(Math.max(0.0, newOutstanding));
+
+        if (account.getOutstanding() == 0.0) {
             account.setStatus("CLOSED");
         }
+
         loanAccountRepo.save(account);
 
+        // ✅ Summary safe (null fix)
         LabourLoanSummary summary = summaryRepo.findByLoanAccountId(account.getId());
+        if (summary == null) {
+            summary = LabourLoanSummary.builder()
+                    .loanAccount(account)
+                    .totalDisbursed(0.0)
+                    .totalRepaid(0.0)
+                    .totalInterest(0.0)
+                    .outstandingAmount(account.getOutstanding())
+                    .build();
+        }
+
         summary.setTotalRepaid(summary.getTotalRepaid() + amount);
         summary.setOutstandingAmount(account.getOutstanding());
         summaryRepo.save(summary);
@@ -251,5 +294,4 @@ public class ContractService {
     public LabourLoanSummary getLoanSummary(Long accountId) {
         return summaryRepo.findByLoanAccountId(accountId);
     }
-
 }

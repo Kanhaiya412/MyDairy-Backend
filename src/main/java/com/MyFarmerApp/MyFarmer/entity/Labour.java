@@ -3,7 +3,7 @@ package com.MyFarmerApp.MyFarmer.entity;
 
 import com.MyFarmerApp.MyFarmer.enums.LabourStatus;
 import com.MyFarmerApp.MyFarmer.enums.WageType;
-import com.MyFarmerApp.MyFarmer.entity.contracts.LabourContract;  // ✅ FIXED IMPORT
+import com.MyFarmerApp.MyFarmer.entity.contracts.LabourContract;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
@@ -36,6 +36,10 @@ public class Labour {
 
     @Column(name = "U_MOBILE", length = 15)
     private String mobile;
+
+    // ✅ NEW: Photo URL / path
+    @Column(name = "U_PHOTO_URL", length = 500)
+    private String photoUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "U_WAGE_TYPE", nullable = false)

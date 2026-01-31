@@ -3,10 +3,19 @@ package com.MyFarmerApp.MyFarmer.entity;
 import com.MyFarmerApp.MyFarmer.enums.Shift;
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "DIV_MILKENTRY")
+@Table(
+        name = "DIV_MILKENTRY",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_milk_entry_unique",
+                        columnNames = {"user_id", "cattle_id", "U_DATE", "U_SHIFT"}
+                )
+        }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -22,7 +31,7 @@ public class MilkEntry {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    // NEW — Optional cattle-wise milk logging
+    // Optional cattle-wise milk logging
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cattle_id")
     private CattleEntry cattleEntry;  // NULL = full farm milk entry

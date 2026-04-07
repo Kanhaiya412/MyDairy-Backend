@@ -34,26 +34,22 @@ public class LabourController {
         this.labourDashboardService = labourDashboardService;
     }
 
-    private Long extractUserId(String authHeader) {
-        if (authHeader == null || authHeader.isBlank()) {
-            throw new RuntimeException("Authorization header missing");
+    private Long extractUserId() {
+        Object principal = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof com.MyFarmerApp.MyFarmer.config.MyFarmerUserDetails) {
+            return ((com.MyFarmerApp.MyFarmer.config.MyFarmerUserDetails) principal).getUserId();
         }
-        Object idObj = authService.getUserFromToken(authHeader).get("userId");
-        return ((Number) idObj).longValue();
+        throw new SecurityException("Unauthorized or Invalid Session");
     }
 
     // ───────────────────────────── LABOUR ──────────────────────────────────
 
     @PostMapping("/add")
     public ResponseEntity<?> addLabour(
-            @RequestBody LabourRequest req,
-            @RequestHeader("Authorization") String authHeader
-    ) {
+            @RequestBody LabourRequest req    ) {
         try {
-            Long userId = extractUserId(authHeader);
-            User user = authService.getUserById(userId);
-
-            Labour saved = labourService.addLabour(user, req);
+            Long userId = extractUserId();
+            Labour saved = labourService.addLabour(userId, req);
             return ResponseEntity.ok(LabourMapper.toDTO(saved));
 
         } catch (IllegalArgumentException e) {
@@ -63,12 +59,23 @@ public class LabourController {
         }
     }
 
+    @PostMapping("/upload-photo")
+    public ResponseEntity<?> uploadPhoto(
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file    ) {
+        try {
+            Long userId = extractUserId();
+            String photoUrl = labourService.uploadPhoto(userId, file);
+            return ResponseEntity.ok(java.util.Collections.singletonMap("photoUrl", photoUrl));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
     @GetMapping("/my")
     public ResponseEntity<?> getMyLabours(
-            @RequestHeader("Authorization") String authHeader
     ) {
         try {
-            Long userId = extractUserId(authHeader);
+            Long userId = extractUserId();
 
             List<LabourResponseDTO> list = labourService.getLaboursForUser(userId)
                     .stream()
@@ -84,10 +91,10 @@ public class LabourController {
     @PutMapping("/{id}")
     public ResponseEntity<?> updateLabour(
             @PathVariable Long id,
-            @RequestBody LabourRequest req
-    ) {
+            @RequestBody LabourRequest req    ) {
         try {
-            Labour updated = labourService.updateLabour(id, req);
+            Long userId = extractUserId();
+            Labour updated = labourService.updateLabour(userId, id, req);
             return ResponseEntity.ok(LabourMapper.toDTO(updated));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -95,9 +102,11 @@ public class LabourController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteLabour(@PathVariable Long id) {
+    public ResponseEntity<?> deleteLabour(
+            @PathVariable Long id    ) {
         try {
-            labourService.deleteLabour(id);
+            Long userId = extractUserId();
+            labourService.deleteLabour(userId, id);
             return ResponseEntity.ok("Labour deleted successfully");
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -105,9 +114,11 @@ public class LabourController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<?> getLabourById(@PathVariable Long id) {
+    public ResponseEntity<?> getLabourById(
+            @PathVariable Long id    ) {
         try {
-            Labour labour = labourService.getLabourById(id);
+            Long userId = extractUserId();
+            Labour labour = labourService.getLabourById(userId, id);
             return ResponseEntity.ok(LabourMapper.toDTO(labour));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -117,10 +128,24 @@ public class LabourController {
     // ─────────────────────────── ATTENDANCE ─────────────────────────────────
 
     @PostMapping("/attendance/mark")
-    public ResponseEntity<?> markAttendance(@RequestBody LabourAttendanceRequest req) {
+    public ResponseEntity<?> markAttendance(
+            @RequestBody LabourAttendanceRequest req    ) {
         try {
-            LabourAttendance att = labourService.markAttendance(req);
+            Long userId = extractUserId();
+            LabourAttendance att = labourService.markAttendance(userId, req);
             return ResponseEntity.ok(att);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/attendance/batch")
+    public ResponseEntity<?> markBatchAttendance(
+            @RequestBody com.MyFarmerApp.MyFarmer.dto.LabourBatchAttendanceRequest req    ) {
+        try {
+            Long userId = extractUserId();
+            List<LabourAttendance> list = labourService.markBatchAttendance(userId, req);
+            return ResponseEntity.ok(list);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
@@ -130,10 +155,10 @@ public class LabourController {
     public ResponseEntity<?> getAttendanceForMonth(
             @PathVariable Long labourId,
             @RequestParam int month,
-            @RequestParam int year
-    ) {
+            @RequestParam int year    ) {
         try {
-            List<LabourAttendance> list = labourService.getAttendanceForMonth(labourId, month, year);
+            Long userId = extractUserId();
+            List<LabourAttendance> list = labourService.getAttendanceForMonth(userId, labourId, month, year);
             return ResponseEntity.ok(list);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -143,9 +168,11 @@ public class LabourController {
     // ───────────────────────────── SALARY ───────────────────────────────────
 
     @PostMapping("/salary/generate")
-    public ResponseEntity<?> generateSalary(@RequestBody LabourSalaryGenerateRequest req) {
+    public ResponseEntity<?> generateSalary(
+            @RequestBody LabourSalaryGenerateRequest req    ) {
         try {
-            LabourSalary salary = labourService.generateSalary(req);
+            Long userId = extractUserId();
+            LabourSalary salary = labourService.generateSalary(userId, req);
             return ResponseEntity.ok(salary);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -153,9 +180,11 @@ public class LabourController {
     }
 
     @GetMapping("/salary/{labourId}")
-    public ResponseEntity<?> getSalaryHistory(@PathVariable Long labourId) {
+    public ResponseEntity<?> getSalaryHistory(
+            @PathVariable Long labourId    ) {
         try {
-            List<LabourSalary> list = labourService.getSalaryHistory(labourId);
+            Long userId = extractUserId();
+            List<LabourSalary> list = labourService.getSalaryHistory(userId, labourId);
             return ResponseEntity.ok(list);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -163,10 +192,26 @@ public class LabourController {
     }
 
     @PostMapping("/salary/{salaryId}/paid")
-    public ResponseEntity<?> markSalaryPaid(@PathVariable Long salaryId) {
+    public ResponseEntity<?> markSalaryPaid(
+            @PathVariable Long salaryId,
+            @RequestParam Double amount    ) {
         try {
-            LabourSalary upd = labourService.markSalaryPaid(salaryId);
+            Long userId = extractUserId();
+            LabourSalary upd = labourService.markSalaryPaid(userId, salaryId, amount);
             return ResponseEntity.ok(upd);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PostMapping("/bulk-pay")
+    public ResponseEntity<?> payBulk(
+            @RequestParam Long labourId,
+            @RequestParam Double amount    ) {
+        try {
+            Long userId = extractUserId();
+            labourService.payLumpsumSalary(userId, labourId, amount);
+            return ResponseEntity.ok("Bulk payment processed and allocated successfully.");
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
@@ -175,8 +220,10 @@ public class LabourController {
     // ───────────────────────────── DASHBOARD ────────────────────────────────
 
     @GetMapping("/{labourId}/dashboard")
-    public ResponseEntity<?> getLabourDashboard(@PathVariable Long labourId) {
-        LabourDashboardDTO dto = labourDashboardService.getDashboard(labourId);
+    public ResponseEntity<?> getLabourDashboard(
+            @PathVariable Long labourId    ) {
+        Long userId = extractUserId();
+        LabourDashboardDTO dto = labourDashboardService.getDashboard(userId, labourId);
         return ResponseEntity.ok(dto);
     }
 }

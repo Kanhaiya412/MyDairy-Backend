@@ -11,6 +11,14 @@ public interface LabourSalaryRepository extends JpaRepository<LabourSalary, Long
 
     Optional<LabourSalary> findByLabourAndMonthAndYear(Labour labour, int month, int year);
 
+    Optional<LabourSalary> findByLabourIdAndMonthAndYear(Long labourId, int month, int year);
+
     List<LabourSalary> findByLabourOrderByYearDescMonthDesc(Labour labour);
+
+    List<LabourSalary> findByLabourOrderByYearAscMonthAsc(Labour labour);
+
+    List<LabourSalary> findByLabourIdOrderByYearDescMonthDesc(Long labourId);
+
+    List<LabourSalary> findByLabourIdOrderByYearAscMonthAsc(Long labourId);
 
 }

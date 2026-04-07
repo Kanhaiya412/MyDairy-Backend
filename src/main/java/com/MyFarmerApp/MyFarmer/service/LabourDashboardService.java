@@ -11,6 +11,7 @@ import com.MyFarmerApp.MyFarmer.entity.contracts.LabourLeavePenalty;
 import com.MyFarmerApp.MyFarmer.entity.contracts.LabourLoanAccount;
 import com.MyFarmerApp.MyFarmer.entity.contracts.LabourLoanTransaction;
 import com.MyFarmerApp.MyFarmer.enums.LabourPaymentStatus;
+import com.MyFarmerApp.MyFarmer.enums.WageType;
 import com.MyFarmerApp.MyFarmer.repository.LabourRepository;
 import com.MyFarmerApp.MyFarmer.repository.LabourSalaryAdvanceRepository;
 import com.MyFarmerApp.MyFarmer.repository.LabourSalaryRepository;
@@ -18,6 +19,7 @@ import com.MyFarmerApp.MyFarmer.repository.contracts.LabourContractRepository;
 import com.MyFarmerApp.MyFarmer.repository.contracts.LabourLeavePenaltyRepository;
 import com.MyFarmerApp.MyFarmer.repository.contracts.LabourLoanAccountRepository;
 import com.MyFarmerApp.MyFarmer.repository.contracts.LabourLoanTransactionRepository;
+import com.MyFarmerApp.MyFarmer.repository.projection.LabourDashboardSummary;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -38,230 +40,157 @@ public class LabourDashboardService {
     private final LabourSalaryRepository salaryRepository;
     private final LabourLeavePenaltyRepository penaltyRepo;
     private final LabourSalaryAdvanceRepository advanceRepo;
+    private final com.MyFarmerApp.MyFarmer.repository.LabourAttendanceRepository attendanceRepo;
 
-    public LabourDashboardDTO getDashboard(Long labourId) {
+    public LabourDashboardDTO getDashboard(Long userId, Long labourId) {
+        // 1. High Performance Summary Fetch
+        LabourDashboardSummary summary = labourRepository.getDashboardSummary(labourId);
+        
+        if (summary == null) throw new RuntimeException("Labour not found");
 
-        Labour labour = labourRepository.findById(labourId)
-                .orElseThrow(() -> new RuntimeException("Labour not found"));
+        // 2. Ownership & Entity Proxy
+        Labour labour = labourRepository.findById(labourId).get();
+        if (!labour.getUser().getId().equals(userId)) {
+            throw new SecurityException("Unauthorized access to this labour resource");
+        }
 
-        // ─────────────────────────────────────────
-        // CONTRACTS
-        // ─────────────────────────────────────────
-        List<LabourContract> contracts = contractRepo.findByLabourOrderByStartDateDesc(labour);
-
-        LabourContract activeContract = contracts.stream()
-                .filter(LabourContract::getActive)
-                .findFirst()
-                .orElse(null);
-
-        Long activeContractId = activeContract != null ? activeContract.getId() : null;
-        String contractType = activeContract != null ? activeContract.getContractType() : null;
-        Double contractAmount = activeContract != null ? activeContract.getContractAmount() : null;
-        LocalDate contractStart = activeContract != null ? activeContract.getStartDate() : null;
-        LocalDate contractEnd = activeContract != null ? activeContract.getEndDate() : null;
-
-        // ─────────────────────────────────────────
-        // LOAN + INTEREST (EXTRA BORROWED MONEY)
-        // ─────────────────────────────────────────
-        double totalDisbursed = 0.0;
-        double totalRepaid = 0.0;
-        double totalInterest = 0.0;
-        double outstandingPrincipal = 0.0;
-
-        List<LabourLoanAccount> loanAccounts = contracts.isEmpty()
-                ? List.of()
-                : loanAccountRepo.findByContractIn(contracts);
-
+        // 3. List fetching for timeline & interest
+        List<LabourLoanAccount> loanAccounts = loanAccountRepo.findAllByLabourId(labourId);
         List<LabourLoanTransaction> allLoanTxns = new ArrayList<>();
         for (LabourLoanAccount acc : loanAccounts) {
-            List<LabourLoanTransaction> txns =
-                    loanTxnRepo.findByLoanAccountIdOrderByTxnDateDesc(acc.getId());
-            allLoanTxns.addAll(txns);
+            allLoanTxns.addAll(loanTxnRepo.findByLoanAccountIdOrderByTxnDateDesc(acc.getId()));
         }
-
-        if (!allLoanTxns.isEmpty()) {
-            // Principal summary (total disbursed / repaid / outstanding)
-            for (LabourLoanTransaction t : allLoanTxns) {
-                switch (t.getType()) {
-                    case "DISBURSEMENT" -> {
-                        totalDisbursed += t.getAmount();
-                        outstandingPrincipal += t.getAmount();
-                    }
-                    case "REPAYMENT" -> {
-                        totalRepaid += t.getAmount();
-                        outstandingPrincipal -= t.getAmount();
-                    }
-                    case "INTEREST" -> {
-                        // if you ever store interest as TXN, you can decide to handle it here
-                    }
-                    default -> {
-                    }
-                }
-            }
-
-            if (outstandingPrincipal < 0) {
-                outstandingPrincipal = 0.0;
-            }
-
-            // Simple interest per disbursement:
-            // For each DISBURSEMENT:
-            // interest_i = principal_i * monthlyRate * months_since_disbursement
-            LocalDate today = LocalDate.now();
-            double monthlyRate = 0.02; // default 2%
-
-            if (!loanAccounts.isEmpty() && loanAccounts.get(0).getMonthlyInterestRate() != null) {
-                monthlyRate = loanAccounts.get(0).getMonthlyInterestRate();
-            }
-
-            totalInterest = 0.0;
-
-            for (LabourLoanTransaction t : allLoanTxns) {
-                if ("DISBURSEMENT".equals(t.getType())) {
-
-                    double principal = t.getAmount();
-                    LocalDate disbDate = t.getTxnDate();
-
-                    int startYm = disbDate.getYear() * 12 + disbDate.getMonthValue();
-                    int endYm = today.getYear() * 12 + today.getMonthValue();
-                    int months = Math.max(0, endYm - startYm);
-
-                    totalInterest += principal * monthlyRate * months;
-                }
-            }
-        }
-
-        double outstandingWithInterest = outstandingPrincipal + totalInterest;
-
-        // ─────────────────────────────────────────
-        // SALARY SUMMARY (total PAID)
-        // ─────────────────────────────────────────
         List<LabourSalary> salaries = salaryRepository.findByLabourOrderByYearDescMonthDesc(labour);
-        double totalSalaryPaid = salaries.stream()
-                .filter(s -> s.getPaymentStatus() == LabourPaymentStatus.PAID)
-                .mapToDouble(s -> s.getTotalSalary() != null ? s.getTotalSalary() : 0.0)
-                .sum();
-
-        // ─────────────────────────────────────────
-        // PENALTY SUMMARY
-        // ─────────────────────────────────────────
         List<LabourLeavePenalty> penalties = penaltyRepo.findByLabourOrderByDateDesc(labour);
+        List<LabourSalaryAdvance> advances = advanceRepo.findByLabourIdOrderByDateDesc(labourId);
 
-        double totalPenaltyUnpaid = penalties.stream()
-                .filter(p -> "UNPAID".equalsIgnoreCase(p.getStatus()))
-                .mapToDouble(p -> p.getPenaltyAmount() != null ? p.getPenaltyAmount() : 0.0)
-                .sum();
+        // 4. Scalars from Summary
+        double sumDisbursed = summary.getTotalDisbursed() != null ? summary.getTotalDisbursed() : 0.0;
+        double sumRepaid = summary.getTotalRepaid() != null ? summary.getTotalRepaid() : 0.0;
+        double sumSalPaid = summary.getTotalSalaryPaid() != null ? summary.getTotalSalaryPaid() : 0.0;
+        double sumPenPaid = summary.getTotalPenaltyPaid() != null ? summary.getTotalPenaltyPaid() : 0.0;
+        double sumPenUnpaid = summary.getTotalPenaltyUnpaid() != null ? summary.getTotalPenaltyUnpaid() : 0.0;
+        double countPresent = summary.getTotalPresentDays() != null ? summary.getTotalPresentDays() : 0.0;
+        double countHalf = summary.getTotalHalfDays() != null ? summary.getTotalHalfDays() : 0.0;
+        double countAbsent = summary.getTotalAbsentDays() != null ? summary.getTotalAbsentDays() : 0.0;
 
-        double totalPenaltyPaid = penalties.stream()
-                .filter(p -> "PAID".equalsIgnoreCase(p.getStatus()))
-                .mapToDouble(p -> p.getPenaltyAmount() != null ? p.getPenaltyAmount() : 0.0)
-                .sum();
+        // Interest
+        double totalInterest = 0.0;
+        LocalDate today = LocalDate.now();
+        double monthlyRate = (loanAccounts.isEmpty() || loanAccounts.get(0).getMonthlyInterestRate() == null) 
+                             ? 0.02 : loanAccounts.get(0).getMonthlyInterestRate();
 
-        // ─────────────────────────────────────────
-        // SALARY ADVANCES (optional in timeline)
-        // ─────────────────────────────────────────
-        List<LabourSalaryAdvance> advances =
-                advanceRepo.findByLabourIdOrderByDateDesc(labourId);
+        for (LabourLoanTransaction t : allLoanTxns) {
+            if ("DISBURSEMENT".equals(t.getType())) {
+                int months = Math.max(0, (today.getYear() * 12 + today.getMonthValue()) - (t.getTxnDate().getYear() * 12 + t.getTxnDate().getMonthValue()));
+                totalInterest += t.getAmount() * monthlyRate * months;
+            }
+        }
+        double outstandingPrincipal = Math.max(0, sumDisbursed - sumRepaid);
 
-        // ─────────────────────────────────────────
-        // BUILD TIMELINE
-        // ─────────────────────────────────────────
+        // Working Days calculation
+        int totalWorkingDays = 0;
+        if (labour.getWageType() == WageType.MONTHLY || labour.getWageType() == WageType.YEARLY) {
+            LocalDate jd = summary.getJoiningDate() != null ? LocalDate.parse(summary.getJoiningDate()) : labour.getCreatedAt();
+            LocalDate ed = summary.getEndDate() != null ? LocalDate.parse(summary.getEndDate()) : LocalDate.now();
+            long totalCalDays = java.time.temporal.ChronoUnit.DAYS.between(jd, ed) + 1;
+            totalWorkingDays = (int) (totalCalDays - countAbsent - (countHalf * 0.5));
+        } else {
+            totalWorkingDays = (int) (countPresent + (countHalf * 0.5));
+        }
+
+        // Timeline construction
         List<LabourEventDTO> timeline = new ArrayList<>();
-
-        // contract event — ONLY active contract (Q1 = A)
-        if (activeContract != null) {
+        if (summary.getActiveContractId() != null) {
             timeline.add(LabourEventDTO.builder()
-                    .date(activeContract.getStartDate())
+                    .date(LocalDate.parse(summary.getActiveContractStartDate()))
                     .type("CONTRACT_CREATED")
-                    .amount(activeContract.getContractAmount())
-                    .description("Active " + activeContract.getContractType() + " contract started")
+                    .amount(summary.getActiveContractAmount())
+                    .description("Active " + summary.getActiveContractType() + " contract started")
                     .build());
         }
 
-        // loan txns
         for (LabourLoanTransaction t : allLoanTxns) {
-            String desc;
-            if ("DISBURSEMENT".equals(t.getType())) {
-                desc = "Loan / advance given";
-            } else if ("REPAYMENT".equals(t.getType())) {
-                desc = "Loan repayment";
-            } else {
-                desc = "Loan txn: " + t.getType();
-            }
-
             timeline.add(LabourEventDTO.builder()
                     .date(t.getTxnDate())
-                    .type("LOAN_" + t.getType())       // LOAN_DISBURSEMENT / LOAN_REPAYMENT
+                    .type("LOAN_" + t.getType())
                     .amount(t.getAmount())
-                    .description(desc)
+                    .description("DISBURSEMENT".equals(t.getType()) ? "Loan / advance given" : "Loan repayment")
                     .build());
         }
 
-        // salary paid events
         for (LabourSalary s : salaries) {
-            if (s.getPaymentStatus() == LabourPaymentStatus.PAID && s.getPaidDate() != null) {
-                YearMonth ym = YearMonth.of(s.getYear(), s.getMonth());
+            if (s.getAmountPaid() != null && s.getAmountPaid() > 0) {
                 timeline.add(LabourEventDTO.builder()
-                        .date(s.getPaidDate())
-                        .type("SALARY_PAID")
-                        .amount(s.getTotalSalary())
-                        .description("Salary paid for " + ym)
+                        .date(s.getPaidDate() != null ? s.getPaidDate() : LocalDate.now())
+                        .type("SALARY_" + s.getPaymentStatus().name())
+                        .amount(s.getAmountPaid())
+                        .description("Salary paid for " + YearMonth.of(s.getYear(), s.getMonth()))
                         .build());
             }
         }
 
-        // penalty events
         for (LabourLeavePenalty p : penalties) {
-            String desc = "Penalty: " + (p.getReason() != null ? p.getReason() : "");
             timeline.add(LabourEventDTO.builder()
                     .date(p.getDate())
-                    .type("PENALTY_" + p.getStatus())   // PENALTY_PAID / PENALTY_UNPAID
+                    .type("PENALTY_" + p.getStatus())
                     .amount(p.getPenaltyAmount())
-                    .description(desc)
+                    .description("Penalty: " + (p.getReason() != null ? p.getReason() : ""))
                     .build());
         }
 
-        // advances in timeline (Q2 = A — keep visible)
         for (LabourSalaryAdvance a : advances) {
-            String desc = "Salary advance " +
-                    ("PENDING".equalsIgnoreCase(a.getStatus()) ? "taken" : "settled");
             timeline.add(LabourEventDTO.builder()
                     .date(a.getDate())
-                    .type("ADVANCE_" + a.getStatus())   // ADVANCE_PENDING / ADVANCE_SETTLED
+                    .type("ADVANCE_" + a.getStatus())
                     .amount(a.getAmount())
-                    .description(desc)
+                    .description("Salary advance " + ("PENDING".equalsIgnoreCase(a.getStatus()) ? "taken" : "settled"))
                     .build());
         }
 
-        // sort by date DESC, then by type for stable order
-        timeline.sort(
-                Comparator.comparing(LabourEventDTO::getDate)
-                        .reversed()
-                        .thenComparing(LabourEventDTO::getType)
-        );
+        timeline.sort(Comparator.comparing(LabourEventDTO::getDate).reversed().thenComparing(LabourEventDTO::getType));
 
-        // ─────────────────────────────────────────
-        // BUILD FINAL DTO
-        // ─────────────────────────────────────────
+        // Accrued Wages logic
+        double baseRate = (labour.getWageType() == WageType.YEARLY) ? (labour.getYearlySalary() / 365.0) : 
+                          (labour.getDailyWage() != null ? labour.getDailyWage() : (labour.getMonthlySalary() / 30.0));
+        double accrued = totalWorkingDays * baseRate;
+        double pending = Math.max(0, accrued - sumSalPaid);
+
+        // Yearly Penalty Sync
+        if (labour.getWageType() == WageType.YEARLY && labour.getAllowedLeaves() != null) {
+            int extra = (int) (countAbsent - labour.getAllowedLeaves());
+            if (extra > 0) sumPenUnpaid += (extra * baseRate);
+        }
+
         return LabourDashboardDTO.builder()
-                .labourId(labour.getId())
-                .labourName(labour.getLabourName())
-                .mobile(labour.getMobile())
-                .wageType(labour.getWageType() != null ? labour.getWageType().name() : null)
-                .dailyWage(labour.getDailyWage())
-                .monthlySalary(labour.getMonthlySalary())
-                .activeContractId(activeContractId)
-                .contractType(contractType)
-                .contractAmount(contractAmount)
-                .contractStartDate(contractStart)
-                .contractEndDate(contractEnd)
-                .totalDisbursed(totalDisbursed)
-                .totalRepaid(totalRepaid)
+                .labourId(summary.getLabourId())
+                .labourName(summary.getLabourName())
+                .mobile(summary.getMobile())
+                .photoUrl(summary.getPhotoUrl())
+                .status(summary.getStatus())
+                .joiningDate(summary.getJoiningDate() != null ? LocalDate.parse(summary.getJoiningDate()) : null)
+                .endDate(summary.getEndDate() != null ? LocalDate.parse(summary.getEndDate()) : null)
+                .totalWorkingDays(totalWorkingDays)
+                .wageType(summary.getWageType())
+                .dailyWage(summary.getDailyWage())
+                .monthlySalary(summary.getMonthlySalary())
+                .yearlySalary(summary.getYearlySalary())
+                .allowedLeaves(summary.getAllowedLeaves())
+                .activeContractId(summary.getActiveContractId())
+                .contractType(summary.getActiveContractType())
+                .contractAmount(summary.getActiveContractAmount())
+                .contractStartDate(summary.getActiveContractStartDate() != null ? LocalDate.parse(summary.getActiveContractStartDate()) : null)
+                .contractEndDate(summary.getActiveContractEndDate() != null ? LocalDate.parse(summary.getActiveContractEndDate()) : null)
+                .totalDisbursed(sumDisbursed)
+                .totalRepaid(sumRepaid)
                 .outstandingPrincipal(outstandingPrincipal)
                 .totalInterest(totalInterest)
-                .outstandingWithInterest(outstandingWithInterest)
-                .totalSalaryPaid(totalSalaryPaid)
-                .totalPenaltyUnpaid(totalPenaltyUnpaid)
-                .totalPenaltyPaid(totalPenaltyPaid)
+                .outstandingWithInterest(outstandingPrincipal + totalInterest)
+                .totalSalaryPaid(sumSalPaid)
+                .totalAccruedSalary(accrued)
+                .pendingSalary(pending)
+                .totalPenaltyUnpaid(sumPenUnpaid)
+                .totalPenaltyPaid(sumPenPaid)
                 .timeline(timeline)
                 .build();
     }

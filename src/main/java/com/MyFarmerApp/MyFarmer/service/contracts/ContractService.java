@@ -169,122 +169,87 @@ public class ContractService {
         p.setStatus("PAID");
         p.setPaidDate(LocalDate.now());
         return penaltyRepo.save(p);
-    }
-
-    // ------------------------------------------------------------------
-    // 3) LOAN DISBURSEMENT
+    }    // ------------------------------------------------------------------
+    // LOAN MANAGEMENT (BY LABOUR ID)
     // ------------------------------------------------------------------
 
     @Transactional
-    public LabourLoanTransaction recordLoanDisbursement(Long contractId, LoanDisbursementRequest req) {
-
-        if (req.getAmount() == null || req.getAmount() <= 0)
-            throw new RuntimeException("amount must be positive");
-        if (req.getDate() == null || req.getDate().isBlank())
-            throw new RuntimeException("date is required (yyyy-MM-dd)");
-
-        LabourLoanAccount account = loanAccountRepo.findByContractId(contractId);
+    public LabourLoanAccount getOrCreateLoanAccount(Long labourId) {
+        LabourLoanAccount account = loanAccountRepo.findByLabourId(labourId);
         if (account == null) {
-            throw new RuntimeException("Loan account not found for contract");
-        }
+            Labour labour = labourRepository.findById(labourId)
+                    .orElseThrow(() -> new RuntimeException("Labour not found"));
 
-        double amount = req.getAmount();
+            account = LabourLoanAccount.builder()
+                    .labour(labour)
+                    .monthlyInterestRate(0.02) // 2% Default simple interest
+                    .outstanding(0.0)
+                    .status("ACTIVE")
+                    .createdAt(LocalDate.now())
+                    .build();
+            account = loanAccountRepo.save(account);
 
-        // ✅ Update outstanding
-        account.setOutstanding(account.getOutstanding() + amount);
-        loanAccountRepo.save(account);
-
-        // ✅ Summary safe
-        LabourLoanSummary summary = summaryRepo.findByLoanAccountId(account.getId());
-        if (summary == null) {
-            summary = LabourLoanSummary.builder()
+            LabourLoanSummary summary = LabourLoanSummary.builder()
                     .loanAccount(account)
                     .totalDisbursed(0.0)
                     .totalRepaid(0.0)
                     .totalInterest(0.0)
-                    .outstandingAmount(account.getOutstanding())
+                    .outstandingAmount(0.0)
                     .build();
+            summaryRepo.save(summary);
         }
+        return account;
+    }
 
+    @Transactional
+    public LabourLoanTransaction recordLoanDisbursementByLabour(Long labourId, LoanDisbursementRequest req) {
+        LabourLoanAccount account = getOrCreateLoanAccount(labourId);
+        double amount = req.getAmount();
+
+        account.setOutstanding(account.getOutstanding() + amount);
+        loanAccountRepo.save(account);
+
+        LabourLoanSummary summary = summaryRepo.findByLoanAccountId(account.getId());
         summary.setTotalDisbursed(summary.getTotalDisbursed() + amount);
         summary.setOutstandingAmount(account.getOutstanding());
         summaryRepo.save(summary);
 
-        // ✅ Txn entry
-        LabourLoanTransaction txn = LabourLoanTransaction.builder()
+        return loanTxnRepo.save(LabourLoanTransaction.builder()
                 .loanAccount(account)
                 .txnDate(LocalDate.parse(req.getDate()))
                 .type("DISBURSEMENT")
                 .amount(amount)
                 .reason(req.getReason())
                 .notes(req.getNotes())
-                .build();
-
-        return loanTxnRepo.save(txn);
+                .createdAt(LocalDate.now())
+                .build());
     }
 
-    // ------------------------------------------------------------------
-    // 4) LOAN REPAYMENT (✅ FIXED)
-    // ------------------------------------------------------------------
-
     @Transactional
-    public LabourLoanTransaction recordLoanRepayment(Long contractId, LoanRepaymentRequest req) {
-
-        if (req.getAmount() == null || req.getAmount() <= 0)
-            throw new RuntimeException("amount must be positive");
-        if (req.getDate() == null || req.getDate().isBlank())
-            throw new RuntimeException("date is required (yyyy-MM-dd)");
-
-        LabourLoanAccount account = loanAccountRepo.findByContractId(contractId);
-        if (account == null) {
-            throw new RuntimeException("Loan account not found for contract");
-        }
-
+    public LabourLoanTransaction recordLoanRepaymentByLabour(Long labourId, LoanRepaymentRequest req) {
+        LabourLoanAccount account = getOrCreateLoanAccount(labourId);
         double amount = req.getAmount();
 
-        // ✅ outstanding never negative
-        double newOutstanding = account.getOutstanding() - amount;
-        account.setOutstanding(Math.max(0.0, newOutstanding));
-
-        if (account.getOutstanding() == 0.0) {
-            account.setStatus("CLOSED");
-        }
-
+        account.setOutstanding(Math.max(0.0, account.getOutstanding() - amount));
         loanAccountRepo.save(account);
 
-        // ✅ Summary safe (null fix)
         LabourLoanSummary summary = summaryRepo.findByLoanAccountId(account.getId());
-        if (summary == null) {
-            summary = LabourLoanSummary.builder()
-                    .loanAccount(account)
-                    .totalDisbursed(0.0)
-                    .totalRepaid(0.0)
-                    .totalInterest(0.0)
-                    .outstandingAmount(account.getOutstanding())
-                    .build();
-        }
-
         summary.setTotalRepaid(summary.getTotalRepaid() + amount);
         summary.setOutstandingAmount(account.getOutstanding());
         summaryRepo.save(summary);
 
-        LabourLoanTransaction txn = LabourLoanTransaction.builder()
+        return loanTxnRepo.save(LabourLoanTransaction.builder()
                 .loanAccount(account)
                 .txnDate(LocalDate.parse(req.getDate()))
                 .type("REPAYMENT")
                 .amount(amount)
                 .notes(req.getNotes())
-                .build();
-
-        return loanTxnRepo.save(txn);
+                .createdAt(LocalDate.now())
+                .build());
     }
 
-    // ------------------------------------------------------------------
-    // 5) GET LOAN ACCOUNT + TXNS
-    // ------------------------------------------------------------------
-
-    public LabourLoanAccount getLoanAccount(Long contractId) {
-        return loanAccountRepo.findByContractId(contractId);
+    public LabourLoanAccount getLoanAccountByLabour(Long labourId) {
+        return loanAccountRepo.findByLabourId(labourId);
     }
 
     public List<LabourLoanTransaction> getLoanTransactions(Long accountId) {

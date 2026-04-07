@@ -3,5 +3,8 @@ package com.MyFarmerApp.MyFarmer.enums;
 
 public enum LabourAttendanceStatus {
     PRESENT,
-    ABSENT
+    ABSENT,
+    HALF_DAY,
+    PAID_LEAVE,
+    OFF_DAY
 }

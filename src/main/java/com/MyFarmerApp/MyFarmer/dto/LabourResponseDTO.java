@@ -23,6 +23,8 @@ public class LabourResponseDTO {
     private String wageType; // DAILY | MONTHLY
     private Double dailyWage;
     private Double monthlySalary;
+    private Double yearlySalary;
+    private Integer allowedLeaves;
 
     private String role;
 

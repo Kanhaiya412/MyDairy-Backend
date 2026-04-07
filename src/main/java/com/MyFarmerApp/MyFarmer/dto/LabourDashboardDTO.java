@@ -15,9 +15,20 @@ public class LabourDashboardDTO {
     private Long labourId;
     private String labourName;
     private String mobile;
+    private String photoUrl;
+    private String status;
+    
+    // Auto-Metrics
+    private LocalDate joiningDate;
+    private LocalDate endDate;
+    private Integer totalWorkingDays;
+    
+    // Contract info
     private String wageType;        // DAILY / MONTHLY / YEARLY (from contractType or wageType)
     private Double dailyWage;
     private Double monthlySalary;
+    private Double yearlySalary;
+    private Integer allowedLeaves;
 
     // ACTIVE CONTRACT
     private Long activeContractId;
@@ -35,6 +46,8 @@ public class LabourDashboardDTO {
 
     // SALARY SUMMARY
     private Double totalSalaryPaid;
+    private Double totalAccruedSalary; // All-time calculated earned wage
+    private Double pendingSalary;      // totalAccruedSalary - totalSalaryPaid
 
     // PENALTY SUMMARY
     private Double totalPenaltyUnpaid;

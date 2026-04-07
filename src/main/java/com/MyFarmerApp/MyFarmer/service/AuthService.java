@@ -37,6 +37,12 @@ public class AuthService {
             return "Email already exists!";
         }
 
+        if (userRepository.findByUsername(request.getUsername()).isPresent()) {
+            kafkaProducer.send(UserEventPayload.json(
+                    "REGISTER_FAILED", request.getUsername(), "UNKNOWN", false, "username_exists"));
+            return "Username already exists!";
+        }
+
         Role userRole;
         try {
             userRole = Role.valueOf(request.getRole().toString().toUpperCase());

@@ -51,6 +51,12 @@ public class Labour {
     @Column(name = "U_MONTHLY_SALARY")
     private Double monthlySalary;
 
+    @Column(name = "U_YEARLY_SALARY")
+    private Double yearlySalary;
+
+    @Column(name = "U_ALLOWED_LEAVES")
+    private Integer allowedLeaves;
+
     @Column(name = "U_ADDRESS", length = 255)
     private String address;
 
@@ -65,6 +71,10 @@ public class Labour {
 
     @Column(name = "U_JOININGDATE")
     private LocalDate joiningDate;
+
+    // ✅ NEW: Soft-delete tracking date
+    @Column(name = "U_ENDDATE")
+    private LocalDate endDate;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "U_STATUS", nullable = false)

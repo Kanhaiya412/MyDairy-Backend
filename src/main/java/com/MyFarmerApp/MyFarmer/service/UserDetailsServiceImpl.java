@@ -27,14 +27,15 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         GrantedAuthority authority =
                 new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
 
-        return new org.springframework.security.core.userdetails.User(
+        return new com.MyFarmerApp.MyFarmer.config.MyFarmerUserDetails(
                 user.getUsername(),
                 user.getPassword(),
                 true,
                 true,
                 true,
                 true,
-                Collections.singletonList(authority)
+                Collections.singletonList(authority),
+                user.getId()
         );
     }
 }

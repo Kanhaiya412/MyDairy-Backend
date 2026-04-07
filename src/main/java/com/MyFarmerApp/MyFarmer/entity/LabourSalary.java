@@ -39,8 +39,11 @@ public class LabourSalary {
     @Column(name = "U_MANUAL_DAYS")
     private Integer manualDays;
 
-    @Column(name = "U_TOTAL_SALARY")
+    @Column(name = "U_TOTAL_SALARY", nullable = false)
     private Double totalSalary;
+
+    @Column(name = "U_AMOUNT_PAID", nullable = false)
+    private Double amountPaid = 0.0;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "U_PAYMENT_STATUS", nullable = false, length = 10)

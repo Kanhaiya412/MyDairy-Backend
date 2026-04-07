@@ -15,8 +15,13 @@ public class LabourLoanAccount {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "labour_id", nullable = false)
+    @JsonIgnore
+    private com.MyFarmerApp.MyFarmer.entity.Labour labour;
+
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "contract_id", nullable = false)
+    @JoinColumn(name = "contract_id", nullable = true)
     @JsonIgnore
     private LabourContract contract;
     @Column(name = "U_MONTHLY_INTEREST_RATE")

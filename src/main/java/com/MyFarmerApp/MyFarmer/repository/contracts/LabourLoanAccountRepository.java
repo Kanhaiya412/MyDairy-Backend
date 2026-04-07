@@ -8,6 +8,10 @@ import java.util.List;
 
 public interface LabourLoanAccountRepository extends JpaRepository<LabourLoanAccount, Long> {
     LabourLoanAccount findByContractId(Long contractId);
+    LabourLoanAccount findByLabourId(Long labourId);
+
+    // ✅ Returns ALL loan accounts for a labour (used in dashboard to include non-contract udhar)
+    List<LabourLoanAccount> findAllByLabourId(Long labourId);
 
     List<LabourLoanAccount> findByContractIn(List<LabourContract> contracts);
 }

@@ -47,6 +47,10 @@ public class MilkEntryService {
             throw new IllegalArgumentException("Future date not allowed");
         }
 
+        if (request.getFat() != null && request.getFat() > 10.0) {
+            throw new IllegalArgumentException("Fat percentage cannot exceed 10.0%");
+        }
+
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
@@ -125,6 +129,10 @@ public class MilkEntryService {
 
         if (request.getDate().isAfter(LocalDate.now())) {
             throw new IllegalArgumentException("Future date not allowed");
+        }
+
+        if (request.getFat() != null && request.getFat() > 10.0) {
+            throw new IllegalArgumentException("Fat percentage cannot exceed 10.0%");
         }
 
         User user = userRepository.findById(request.getUserId())

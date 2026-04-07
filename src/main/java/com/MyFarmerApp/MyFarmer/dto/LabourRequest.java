@@ -18,6 +18,8 @@ public class LabourRequest {
 
     private Double dailyWage;
     private Double monthlySalary;
+    private Double yearlySalary;
+    private Integer allowedLeaves;
 
     private String role;          // optional, default "LABOUR"
 

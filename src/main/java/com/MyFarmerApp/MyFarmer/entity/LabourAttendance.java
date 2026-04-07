@@ -31,8 +31,14 @@ public class LabourAttendance {
     private LocalDate date;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "U_STATUS", nullable = false, length = 10)
+    @Column(name = "U_STATUS", nullable = false, length = 15)
     private LabourAttendanceStatus status;
+
+    @Column(name = "U_SHIFT", length = 10)
+    private String shift = "DAY"; // e.g., DAY, NIGHT
+
+    @Column(name = "U_WORK_HOURS")
+    private Double workHours = 8.0;
 
     @Column(name = "U_REMARKS", length = 255)
     private String remarks;

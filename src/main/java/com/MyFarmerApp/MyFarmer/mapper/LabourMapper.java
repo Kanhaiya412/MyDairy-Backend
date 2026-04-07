@@ -20,6 +20,8 @@ public class LabourMapper {
                 .wageType(l.getWageType() != null ? l.getWageType().name() : null)
                 .dailyWage(l.getDailyWage())
                 .monthlySalary(l.getMonthlySalary())
+                .yearlySalary(l.getYearlySalary())
+                .allowedLeaves(l.getAllowedLeaves())
                 .role(l.getRole())
                 .joiningDate(l.getJoiningDate())
                 .status(l.getStatus())

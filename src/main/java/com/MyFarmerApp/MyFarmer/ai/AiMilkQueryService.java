@@ -1,14 +1,17 @@
 package com.MyFarmerApp.MyFarmer.ai;
 
 import com.MyFarmerApp.MyFarmer.entity.MilkEntry;
-import com.MyFarmerApp.MyFarmer.enums.AiIntent;
 import com.MyFarmerApp.MyFarmer.service.MilkEntryService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class AiMilkQueryService {
 
@@ -18,81 +21,92 @@ public class AiMilkQueryService {
         this.milkEntryService = milkEntryService;
     }
 
-    public String resolve(AiIntent intent, Long userId, Integer month) {
+    public String get_milk_by_date(Long userId, String dateStr) {
+        log.info("Fetching milk for date: {} for user: {}", dateStr, userId);
+        try {
+            LocalDate date = LocalDate.parse(dateStr);
+            List<MilkEntry> entries =
+                    milkEntryService.getEntriesByUserBetween(userId, date, date);
 
-        return switch (intent) {
+            if (entries.isEmpty()) {
+                return "No milk records found for " + dateStr + ".";
+            }
 
-            case TODAY_MILK -> todayMilk(userId);
-
-            case LAST_7_DAYS_MILK -> last7DaysMilk(userId);
-
-            case MONTHLY_MILK -> monthlyMilk(userId);
-
-            default -> "I couldn't understand your request yet. Please ask about milk data.";
-        };
-    }
-
-    // ---------------- TODAY ----------------
-    private String todayMilk(Long userId) {
-
-        LocalDate today = LocalDate.now();
-
-        List<MilkEntry> entries =
-                milkEntryService.getEntriesByUserBetween(userId, today, today);
-
-        if (entries.isEmpty()) {
-            return "No milk entry found for today.";
+            return formatMilkSummary(entries, "Milk report for " + dateStr);
+        } catch (Exception e) {
+            log.error("Failed to parse date: {}", dateStr, e);
+            return "Invalid date format. Please use YYYY-MM-DD.";
         }
-
-        double totalMilk = entries.stream()
-                .mapToDouble(MilkEntry::getMilkQuantity)
-                .sum();
-
-        double totalAmount = entries.stream()
-                .mapToDouble(e -> e.getTotalPayment() != null ? e.getTotalPayment() : 0)
-                .sum();
-
-        return "Today's milk production is "
-                + totalMilk + " liters. Total amount: ₹" + totalAmount;
     }
 
-    // ---------------- LAST 7 DAYS ----------------
-    private String last7DaysMilk(Long userId) {
+    public String get_today_milk(Long userId) {
+        return get_milk_by_date(userId, LocalDate.now().toString());
+    }
 
+    public String get_last_7_days_milk(Long userId) {
         LocalDate end = LocalDate.now();
         LocalDate start = end.minusDays(6);
-
-        List<MilkEntry> entries =
-                milkEntryService.getEntriesByUserBetween(userId, start, end);
-
-        if (entries.isEmpty()) {
-            return "No milk records found for the last 7 days.";
-        }
-
-        double totalMilk = entries.stream()
-                .mapToDouble(MilkEntry::getMilkQuantity)
-                .sum();
-
-        return "Milk produced in the last 7 days is "
-                + totalMilk + " liters.";
+        return get_milk_report(userId, start.toString(), end.toString(), false);
     }
 
-    // ---------------- MONTHLY ----------------
-    private String monthlyMilk(Long userId) {
-
-        YearMonth currentMonth = YearMonth.now();
-
-        List<MilkEntry> entries =
-                milkEntryService.getEntriesByUserBetween(
-                        userId,
-                        currentMonth.atDay(1),
-                        currentMonth.atEndOfMonth()
-                );
-
-        if (entries.isEmpty()) {
-            return "No milk records found for this month.";
+    public String get_monthly_milk(Long userId, Integer month) {
+        log.info("Fetching monthly milk for user: {}, month: {}", userId, month);
+        
+        YearMonth targetMonth;
+        if (month != null && month >= 1 && month <= 12) {
+            targetMonth = YearMonth.of(LocalDate.now().getYear(), month);
+        } else {
+            targetMonth = YearMonth.now();
         }
 
+        return get_milk_report(userId, 
+                targetMonth.atDay(1).toString(), 
+                targetMonth.atEndOfMonth().toString(), 
+                false);
+    }
+
+    public String get_milk_report(Long userId, String startDateStr, String endDateStr, boolean dayWise) {
+        log.info("Fetching milk report from {} to {} (dayWise: {}) for user: {}", 
+                startDateStr, endDateStr, dayWise, userId);
+        try {
+            LocalDate start = LocalDate.parse(startDateStr);
+            LocalDate end = LocalDate.parse(endDateStr);
+
+            List<MilkEntry> entries = milkEntryService.getEntriesByUserBetween(userId, start, end);
+
+            if (entries.isEmpty()) {
+                return String.format("No milk records found between %s and %s.", startDateStr, endDateStr);
+            }
+
+            if (!dayWise) {
+                return formatMilkSummary(entries, String.format("Summary from %s to %s", startDateStr, endDateStr));
+            }
+
+            // Day-wise breakdown
+            StringBuilder sb = new StringBuilder();
+            sb.append(String.format("Day-wise Milk Report (%s to %s):\n", startDateStr, endDateStr));
+            
+            entries.stream()
+                    .collect(Collectors.groupingBy(MilkEntry::getDate, TreeMap::new, Collectors.toList()))
+                    .forEach((date, dailyEntries) -> {
+                        double dailyQty = dailyEntries.stream().mapToDouble(MilkEntry::getMilkQuantity).sum();
+                        double dailyAmt = dailyEntries.stream().mapToDouble(e -> e.getTotalPayment() != null ? e.getTotalPayment() : 0).sum();
+                        sb.append(String.format("- %s: %.2fL | ₹%.2f\n", date, dailyQty, dailyAmt));
+                    });
+
+            double totalMilk = entries.stream().mapToDouble(MilkEntry::getMilkQuantity).sum();
+            double totalAmount = entries.stream().mapToDouble(e -> e.getTotalPayment() != null ? e.getTotalPayment() : 0).sum();
+            sb.append(String.format("\nTOTAL: %.2fL | ₹%.2f", totalMilk, totalAmount));
+
+            return sb.toString();
+
+        } catch (Exception e) {
+            log.error("Report execution failed", e);
+            return "Unable to generate milk report.";
+        }
+    }
+
+    private String formatMilkSummary(List<MilkEntry> entries, String title) {
         double totalMilk = entries.stream()
                 .mapToDouble(MilkEntry::getMilkQuantity)
                 .sum();
@@ -101,7 +115,6 @@ public class AiMilkQueryService {
                 .mapToDouble(e -> e.getTotalPayment() != null ? e.getTotalPayment() : 0)
                 .sum();
 
-        return "This month's total milk is "
-                + totalMilk + " liters with earnings ₹" + totalAmount;
+        return String.format("%s: %.2f liters. Total amount: ₹%.2f", title, totalMilk, totalAmount);
     }
 }
